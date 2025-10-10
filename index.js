@@ -1,9 +1,10 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const cors = require('cors');
-const dotenv = require("dotenv");
-dotenv.config();
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const cors = require("cors");
+const { TranscriptionService } = require("./services/transcriptionService");
+const { RoomManager } = require("./services/roomManager");
+const config = require("./config");
 
 const app = express();
 app.use(cors());
@@ -11,96 +12,93 @@ app.use(cors());
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "*",
+    origin: config.ALLOWED_ORIGINS,
     methods: ["GET", "POST"],
-    credentials: true
-  }
+  },
 });
 
-const rooms = new Map();
+const roomManager = new RoomManager();
+const transcriptionServices = new Map();
 
-io.on('connection', (socket) => {
-  console.log('✅ User connected:', socket.id);
+io.on("connection", (socket) => {
+  console.log(`✅ User connected: ${socket.id}`);
 
-  socket.on('join-room', (roomId) => {
-    socket.join(roomId);
-    
-    if (!rooms.has(roomId)) {
-      rooms.set(roomId, new Set());
-    }
-    
-    // Get existing users before adding new user
-    const existingUsers = Array.from(rooms.get(roomId));
-    
-    // Add new user to room
-    rooms.get(roomId).add(socket.id);
-
-    console.log(`📞 User ${socket.id} joined room ${roomId}`);
-    console.log(`👥 Room ${roomId} now has ${rooms.get(roomId).size} users:`, Array.from(rooms.get(roomId)));
-
-    // If there are existing users, notify the new user
-    if (existingUsers.length > 0) {
-      console.log(`📤 Sending existing users to ${socket.id}:`, existingUsers);
-      socket.emit('existing-users', existingUsers);
-    }
-
-    // Notify existing users about the new user
-    socket.to(roomId).emit('user-joined', socket.id);
-    console.log(`📢 Notified room ${roomId} about new user ${socket.id}`);
-  });
-
-  socket.on('offer', (data) => {
-    console.log(`📨 Offer: ${socket.id} → ${data.to}`);
-    io.to(data.to).emit('offer', {
-      offer: data.offer,
-      from: socket.id
-    });
-  });
-
-  socket.on('answer', (data) => {
-    console.log(`📨 Answer: ${socket.id} → ${data.to}`);
-    io.to(data.to).emit('answer', {
-      answer: data.answer,
-      from: socket.id
-    });
-  });
-
-  socket.on('ice-candidate', (data) => {
-    console.log(`🧊 ICE candidate: ${socket.id} → ${data.to}`);
-    io.to(data.to).emit('ice-candidate', {
-      candidate: data.candidate,
-      from: socket.id
-    });
-  });
-
-  socket.on('transcript', (data) => {
-    console.log(`📝 Transcript from ${socket.id} in room ${data.roomId}: "${data.text}"`);
-    socket.to(data.roomId).emit('transcript', {
-      text: data.text,
-      speaker: data.speaker,
-      timestamp: data.timestamp
-    });
-  });
-
-  socket.on('disconnect', () => {
-    console.log('❌ User disconnected:', socket.id);
-    
-    rooms.forEach((users, roomId) => {
-      if (users.has(socket.id)) {
-        users.delete(socket.id);
-        socket.to(roomId).emit('user-left', socket.id);
-        console.log(`👋 User ${socket.id} left room ${roomId}`);
-        
-        if (users.size === 0) {
-          rooms.delete(roomId);
-          console.log(`🗑️ Room ${roomId} deleted (empty)`);
-        }
+  socket.on("join-room", async (roomId) => {
+    try {
+      if (!roomId || typeof roomId !== "string") {
+        console.error("Invalid room ID");
+        return;
       }
+
+      await socket.join(roomId);
+      roomManager.addUser(roomId, socket.id);
+
+      const existingUsers = roomManager.getUsers(roomId).filter((id) => id !== socket.id);
+      socket.emit("existing-users", existingUsers);
+
+      socket.to(roomId).emit("user-joined", socket.id);
+      console.log(`👥 User ${socket.id} joined room: ${roomId}`);
+
+      // Initialize transcription service for this user
+      const transcriptionService = new TranscriptionService(roomId, socket.id);
+      await transcriptionService.start((transcript) => {
+        io.to(roomId).emit("transcript", {
+          text: transcript,
+          speaker: socket.id,
+          timestamp: new Date().toISOString(),
+        });
+      });
+
+      transcriptionServices.set(socket.id, transcriptionService);
+    } catch (error) {
+      console.error("Error joining room:", error);
+    }
+  });
+
+  socket.on("audio-stream", async ({ audio, roomId }) => {
+    try {
+      if (!audio || !roomId) return;
+
+      const transcriptionService = transcriptionServices.get(socket.id);
+      if (transcriptionService) {
+        const audioBuffer = Buffer.from(audio);
+        await transcriptionService.sendAudio(audioBuffer);
+      }
+    } catch (error) {
+      console.error("Error processing audio stream:", error);
+    }
+  });
+
+  socket.on("offer", ({ offer, to }) => {
+    io.to(to).emit("offer", { offer, from: socket.id });
+  });
+
+  socket.on("answer", ({ answer, to }) => {
+    io.to(to).emit("answer", { answer, from: socket.id });
+  });
+
+  socket.on("ice-candidate", ({ candidate, to }) => {
+    io.to(to).emit("ice-candidate", { candidate, from: socket.id });
+  });
+
+  socket.on("disconnect", async () => {
+    console.log(`❌ User disconnected: ${socket.id}`);
+
+    const transcriptionService = transcriptionServices.get(socket.id);
+    if (transcriptionService) {
+      await transcriptionService.stop();
+      transcriptionServices.delete(socket.id);
+    }
+
+    const rooms = roomManager.getUserRooms(socket.id);
+    rooms.forEach((roomId) => {
+      roomManager.removeUser(roomId, socket.id);
+      socket.to(roomId).emit("user-left", socket.id);
     });
   });
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = config.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
