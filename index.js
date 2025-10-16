@@ -2,7 +2,7 @@ const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
 const cors = require("cors");
-const { TranscriptionService } = require("./services/TranscriptionService");
+const { TranscriptionService } = require("./services/transcriptionService");
 const {
   TranscriptionPoolManager,
 } = require("./services/TransactionPoolManager");
