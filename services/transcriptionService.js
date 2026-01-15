@@ -31,8 +31,8 @@ class TranscriptionService {
       this.client = new TranscribeStreamingClient({
         region: config.AWS_REGION,
         credentials: {
-          accessKeyId: config.AWS_TRANSCRIBE_ACCESS_KEY_ID,
-          secretAccessKey: config.AWS_TRANSCRIBE_SECRET_ACCESS_KEY,
+          accessKeyId: config.AWS_ACCESS_KEY_ID,
+          secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
         },
       });
 
@@ -54,7 +54,6 @@ class TranscriptionService {
       const response = await this.client.send(command);
 
       this.isActive = true;
-      console.log(`🎙️ Transcription started for user: ${this.userId} in room: ${this.roomId}`);
 
       // Process transcription events
       this.processTranscriptionEvents(response.TranscriptResultStream);
