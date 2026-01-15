@@ -1,15 +1,16 @@
 const { TranscriptionService } = require("./transcriptionService");
 const { TranslationService } = require("./translationService");
-const { BedrockScamDetectionService } = require("./bedrockscamdetectionservice");
+const { BedrockScamDetectionService } = require("./bedrockScamDetectionService");
 
 /**
  * Enhanced Pipeline: Transcription → Translation → Bedrock Scam Analysis
  * Three-stage pipeline for real-time conversation monitoring and scam detection
  */
 class TranscribeTranslatePipeline {
-  constructor(roomId, userId) {
+  constructor(roomId, userId, userRole = "user") {
     this.roomId = roomId;
     this.userId = userId;
+    this.userRole = userRole; // "user" or "caller"
     this.transcriptionService = null;
     this.translationService = null;
     this.bedrockService = null;
@@ -42,15 +43,16 @@ class TranscribeTranslatePipeline {
       console.log(`🚀 [PIPELINE] Starting Transcribe → Translate → Bedrock Pipeline`);
       console.log(`${'='.repeat(80)}`);
       console.log(`   User ID: ${this.userId}`);
+      console.log(`   User Role: ${this.userRole.toUpperCase()}`);
       console.log(`   Room ID: ${this.roomId}`);
       console.log(`   Target Language: ${options.targetLanguage || 'en'}`);
       console.log(`   Scam Detection: ENABLED`);
       console.log(`   Auto Language Detection: ${options.autoDetectLanguage !== false ? 'ENABLED' : 'DISABLED'}`);
       console.log(`${'='.repeat(80)}\n`);
 
-      // Step 1: Initialize Bedrock Service
+      // Step 1: Initialize Bedrock Service with role
       console.log(`📍 [PIPELINE STEP 1/3] Initializing Bedrock Scam Detection Service...`);
-      this.bedrockService = new BedrockScamDetectionService(this.roomId, this.userId);
+      this.bedrockService = new BedrockScamDetectionService(this.roomId, this.userId, this.userRole);
       const bedrockStarted = await this.bedrockService.start();
 
       if (!bedrockStarted) {
@@ -367,6 +369,18 @@ class TranscribeTranslatePipeline {
     }
     
     console.log(`${'='.repeat(80)}\n`);
+  }
+
+  /**
+   * Register a speaker with their role in the Bedrock service
+   * @param {string} socketId - Speaker's socket ID
+   * @param {string} role - "user" or "caller"
+   */
+  registerSpeaker(socketId, role) {
+    if (this.bedrockService) {
+      this.bedrockService.registerSpeaker(socketId, role);
+      console.log(`👤 [PIPELINE] Registered speaker ${socketId} as ${role.toUpperCase()}`);
+    }
   }
 
   /**

@@ -199,13 +199,22 @@ io.on("connection", (socket) => {
         }
       );
 
-      // Register speaker role in the pipeline's Bedrock service
-      if (pipeline.bedrockService) {
-        // Register all existing users in the room
-        Object.entries(roomRoles.get(roomId)).forEach(([socketId, role]) => {
-          pipeline.bedrockService.registerSpeaker(socketId, role);
-        });
-      }
+      // Register speaker roles in ALL pipelines in this room
+      console.log(`\n👥 [SETUP] Registering all speakers in room ${roomId}...`);
+      const usersInRoom = roomManager.getUsers(roomId);
+      const roomRoleMap = roomRoles.get(roomId);
+      
+      // Register all users (including this one) in ALL pipelines
+      usersInRoom.forEach(userId => {
+        const userPipeline = pipelines.get(userId);
+        if (userPipeline && userPipeline.bedrockService) {
+          // Register all speakers in this pipeline
+          Object.entries(roomRoleMap).forEach(([speakerId, speakerRole]) => {
+            userPipeline.bedrockService.registerSpeaker(speakerId, speakerRole);
+            console.log(`   ✅ Registered ${speakerId} (${speakerRole}) in ${userId}'s pipeline`);
+          });
+        }
+      });
 
       pipelines.set(socket.id, pipeline);
       console.log(`✅ [SETUP] Pipeline initialized for ${assignedRole.toUpperCase()}: ${socket.id}\n`);
