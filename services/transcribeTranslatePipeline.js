@@ -1,20 +1,19 @@
 const { TranscriptionService } = require("./transcriptionService");
 const { TranslationService } = require("./translationService");
-const { BedrockScamDetectionService } = require("./bedrockscamdetectionservice");
+const { BedrockScamDetectionService } = require("./bedrockScamDetectionService");
 
 /**
- * Enhanced Pipeline: Transcription → Translation → Bedrock Scam Analysis
- * Three-stage pipeline for real-time conversation monitoring and scam detection
+ * Simplified Pipeline: Transcription → Translation → Bedrock Fraud Analysis
+ * Analyzes ALL participants equally for fraud detection
  */
 class TranscribeTranslatePipeline {
-  constructor(roomId, userId, userRole = "user") {
+  constructor(roomId, userId) {
     this.roomId = roomId;
     this.userId = userId;
-    this.userRole = userRole; // "user" or "caller"
     this.transcriptionService = null;
     this.translationService = null;
     this.bedrockService = null;
-    this.isActive = false; 
+    this.isActive = false;
     this.pipelineCallback = null;
     this.detectedLanguage = null;
     
@@ -31,8 +30,6 @@ class TranscribeTranslatePipeline {
 
   /**
    * Start the pipeline with all three services
-   * @param {Function} onPipelineOutput - Callback for complete pipeline output
-   * @param {Object} options - Configuration options
    */
   async start(onPipelineOutput, options = {}) {
     try {
@@ -43,23 +40,20 @@ class TranscribeTranslatePipeline {
       console.log(`🚀 [PIPELINE] Starting Transcribe → Translate → Bedrock Pipeline`);
       console.log(`${'='.repeat(80)}`);
       console.log(`   User ID: ${this.userId}`);
-      console.log(`   User Role: ${this.userRole.toUpperCase()}`);
       console.log(`   Room ID: ${this.roomId}`);
-      console.log(`   Target Language: ${options.targetLanguage || 'en'}`);
-      console.log(`   Scam Detection: ENABLED`);
-      console.log(`   Auto Language Detection: ${options.autoDetectLanguage !== false ? 'ENABLED' : 'DISABLED'}`);
+      console.log(`   Fraud Detection: ENABLED (All participants)`);
       console.log(`${'='.repeat(80)}\n`);
 
-      // Step 1: Initialize Bedrock Service with role
-      console.log(`📍 [PIPELINE STEP 1/3] Initializing Bedrock Scam Detection Service...`);
-      this.bedrockService = new BedrockScamDetectionService(this.roomId, this.userId, this.userRole);
+      // Initialize Bedrock Service
+      console.log(`📍 [PIPELINE STEP 1/3] Initializing Bedrock Fraud Detection...`);
+      this.bedrockService = new BedrockScamDetectionService(this.roomId, this.userId);
       const bedrockStarted = await this.bedrockService.start();
 
       if (!bedrockStarted) {
         throw new Error("Failed to start Bedrock Service");
       }
 
-      // Step 2: Initialize Translation Service
+      // Initialize Translation Service
       console.log(`📍 [PIPELINE STEP 2/3] Initializing Translation Service...`);
       this.translationService = new TranslationService(this.roomId, this.userId);
       const translationStarted = await this.translationService.start(
@@ -74,7 +68,7 @@ class TranscribeTranslatePipeline {
         throw new Error("Failed to start Translation Service");
       }
 
-      // Step 3: Initialize Transcription Service
+      // Initialize Transcription Service
       console.log(`📍 [PIPELINE STEP 3/3] Initializing Transcription Service...`);
       this.transcriptionService = new TranscriptionService(this.roomId, this.userId);
       await this.transcriptionService.start(this.handleTranscriptionOutput.bind(this));
@@ -86,8 +80,7 @@ class TranscribeTranslatePipeline {
       console.log(`${'='.repeat(80)}`);
       console.log(`   🎤 Transcription: ACTIVE`);
       console.log(`   🌐 Translation: ACTIVE`);
-      console.log(`   🧠 Bedrock Scam Detection: ACTIVE`);
-      console.log(`   📊 Pipeline: READY`);
+      console.log(`   🧠 Bedrock Fraud Detection: ACTIVE`);
       console.log(`${'='.repeat(80)}\n`);
 
       return true;
@@ -95,133 +88,106 @@ class TranscribeTranslatePipeline {
       console.error(`\n❌ [PIPELINE] Failed to start:`, error.message);
       await this.stop();
       return false;
-    } 
+    }
   }
 
   /**
-   * Handle transcription output and pass to translation
-   * This is the first stage of the pipeline
+   * Handle transcription output
    */
   async handleTranscriptionOutput(transcript) {
     try {
       this.stats.transcriptionsReceived++;
       this.stats.lastActivityTime = new Date().toISOString();
 
-      console.log(`\n${'─'.repeat(80)}`);
-      console.log(`🎤 [PIPELINE STAGE 1: TRANSCRIPTION] Output received`);
-      console.log(`${'─'.repeat(80)}`);
-      console.log(`   Transcription #${this.stats.transcriptionsReceived}`);
+      console.log(`\n🎤 [STAGE 1: TRANSCRIPTION] #${this.stats.transcriptionsReceived}`);
       console.log(`   User: ${this.userId}`);
       console.log(`   Text: "${transcript}"`);
-      console.log(`   Length: ${transcript.length} characters`);
-      console.log(`   Timestamp: ${new Date().toISOString()}`);
-
-      // Pass to next stage: Translation
-      console.log(`\n🔄 [PIPELINE] Passing to Translation Service...`);
 
       if (this.translationService && this.translationService.isActive) {
-        // Translate the transcribed text
         await this.translationService.translateText(transcript, this.detectedLanguage);
       } else {
-        console.error(`❌ [PIPELINE] Translation service not active`);
+        console.error(`❌ Translation service not active`);
         this.stats.errors++;
       }
 
     } catch (error) {
-      console.error(`\n❌ [PIPELINE STAGE 1] Error:`, error.message);
+      console.error(`\n❌ [STAGE 1] Error:`, error.message);
       this.stats.errors++;
     }
   }
 
   /**
-   * Handle translation output and pass to Bedrock analysis
-   * This is the second stage of the pipeline
+   * Handle translation output and pass to Bedrock
    */
   async handleTranslationOutput(translationResult) {
     try {
       this.stats.translationsCompleted++;
       this.stats.lastActivityTime = new Date().toISOString();
 
-      console.log(`\n${'─'.repeat(80)}`);
-      console.log(`🌐 [PIPELINE STAGE 2: TRANSLATION] Output received`);
-      console.log(`${'─'.repeat(80)}`);
-      console.log(`   Translation #${this.stats.translationsCompleted}`);
+      console.log(`\n🌐 [STAGE 2: TRANSLATION] #${this.stats.translationsCompleted}`);
       console.log(`   User: ${this.userId}`);
       console.log(`   Original: "${translationResult.originalText}"`);
       console.log(`   Translated: "${translationResult.translatedText}"`);
-      console.log(`   Languages: ${translationResult.sourceLanguage} → ${translationResult.targetLanguage}`);
-      console.log(`   Duration: ${translationResult.duration}ms`);
 
-      // Add to Bedrock conversation history
+      // Add to conversation history
       if (this.bedrockService && this.bedrockService.isActive) {
         this.bedrockService.addToConversation(
-          translationResult.originalText,
           translationResult.translatedText,
           this.userId
         );
 
-        // Pass to next stage: Bedrock Analysis
-        console.log(`\n🔄 [PIPELINE] Passing to Bedrock Scam Detection...`);
+        // Analyze for fraud (analyzes everyone equally)
+        console.log(`\n🔄 [PIPELINE] Passing to Bedrock Fraud Detection...`);
 
         const analysisResult = await this.bedrockService.analyzeConversation(
-          translationResult.translatedText
+          translationResult.translatedText,
+          this.userId
         );
 
         if (analysisResult) {
           this.handleBedrockAnalysisOutput(translationResult, analysisResult);
         } else {
-          console.error(`❌ [PIPELINE] Bedrock analysis returned null`);
-          // Still emit translation without analysis
+          // Emit without analysis
           this.emitPipelineOutput(translationResult, null);
         }
       } else {
-        console.error(`❌ [PIPELINE] Bedrock service not active`);
-        // Emit without analysis
+        console.error(`❌ Bedrock service not active`);
         this.emitPipelineOutput(translationResult, null);
       }
 
     } catch (error) {
-      console.error(`\n❌ [PIPELINE STAGE 2] Error:`, error.message);
+      console.error(`\n❌ [STAGE 2] Error:`, error.message);
       this.stats.errors++;
     }
   }
 
   /**
-   * Handle Bedrock analysis output - final stage of pipeline
+   * Handle Bedrock analysis output
    */
   handleBedrockAnalysisOutput(translationResult, analysisResult) {
     try {
       this.stats.analysesCompleted++;
       this.stats.lastActivityTime = new Date().toISOString();
 
-      console.log(`\n${'─'.repeat(80)}`);
-      console.log(`🧠 [PIPELINE STAGE 3: BEDROCK ANALYSIS] Output received`);
-      console.log(`${'─'.repeat(80)}`);
-      console.log(`   Analysis #${this.stats.analysesCompleted}`);
+      console.log(`\n🧠 [STAGE 3: FRAUD ANALYSIS] #${this.stats.analysesCompleted}`);
       console.log(`   User: ${this.userId}`);
-      console.log(`   Summary: "${analysisResult.summary}"`);
+      console.log(`   Fraud Score: ${analysisResult.fraudScore}%`);
       console.log(`   Risk Level: ${analysisResult.riskLevel}`);
-      console.log(`   Scam Probability: ${analysisResult.scamProbability}%`);
-      console.log(`   Concerns: ${analysisResult.concerns.join(', ') || 'None'}`);
-      console.log(`   Duration: ${analysisResult.duration}ms`);
 
-      // Emit complete pipeline output
       this.emitPipelineOutput(translationResult, analysisResult);
 
     } catch (error) {
-      console.error(`\n❌ [PIPELINE STAGE 3] Error:`, error.message);
+      console.error(`\n❌ [STAGE 3] Error:`, error.message);
       this.stats.errors++;
     }
   }
 
   /**
-   * Emit complete pipeline output to callback
+   * Emit complete pipeline output
    */
   emitPipelineOutput(translationResult, analysisResult) {
-    console.log(`\n✅ [PIPELINE] Complete output ready`);
-    console.log(`${'─'.repeat(80)}\n`);
+    console.log(`\n✅ [PIPELINE] Complete output ready\n`);
 
-    // Trigger final callback with complete pipeline result
     if (this.pipelineCallback) {
       const pipelineOutput = {
         userId: this.userId,
@@ -234,21 +200,15 @@ class TranscribeTranslatePipeline {
           text: translationResult.translatedText,
           language: translationResult.targetLanguage,
         },
-        scamAnalysis: analysisResult ? {
+        fraudAnalysis: analysisResult ? {
           summary: analysisResult.summary,
-          scamProbability: analysisResult.scamProbability,
+          fraudScore: analysisResult.fraudScore,
           riskLevel: analysisResult.riskLevel,
-          concerns: analysisResult.concerns,
+          redFlags: analysisResult.redFlags,
           reasoning: analysisResult.reasoning,
+          matchedPatterns: analysisResult.matchedPatterns,
         } : null,
-        detectedLanguage: translationResult.detectedLanguage,
         timestamp: translationResult.timestamp,
-        pipelineStats: {
-          stage1Duration: 0, // Transcription duration (not tracked separately)
-          stage2Duration: translationResult.duration,
-          stage3Duration: analysisResult ? analysisResult.duration : 0,
-          totalProcessed: this.stats.analysesCompleted,
-        },
       };
 
       this.pipelineCallback(pipelineOutput);
@@ -257,11 +217,9 @@ class TranscribeTranslatePipeline {
 
   /**
    * Send audio data to the pipeline
-   * @param {Buffer} audioBuffer - Audio data in PCM format
    */
   async sendAudio(audioBuffer) {
     if (!this.isActive || !this.transcriptionService) {
-      console.warn(`⚠️  [PIPELINE] Not active for user ${this.userId}`);
       return;
     }
 
@@ -270,29 +228,6 @@ class TranscribeTranslatePipeline {
     } catch (error) {
       console.error(`❌ [PIPELINE] Error sending audio:`, error.message);
       this.stats.errors++;
-    }
-  }
-
-  /**
-   * Change translation target language
-   * @param {string} targetLanguage - Target language code
-   */
-  setTargetLanguage(targetLanguage) {
-    if (this.translationService) {
-      console.log(`\n🔄 [PIPELINE] Changing target language to: ${targetLanguage}`);
-      this.translationService.setLanguages(
-        this.translationService.sourceLanguage,
-        targetLanguage
-      );
-    }
-  }
-
-  /**
-   * Clear conversation history in Bedrock
-   */
-  clearConversationHistory() {
-    if (this.bedrockService) {
-      this.bedrockService.clearHistory();
     }
   }
 
@@ -311,10 +246,6 @@ class TranscribeTranslatePipeline {
       stats: {
         ...this.stats,
         uptime: uptime,
-        uptimeFormatted: this.formatDuration(uptime),
-        successRate: this.stats.transcriptionsReceived > 0
-          ? ((this.stats.analysesCompleted / this.stats.transcriptionsReceived) * 100).toFixed(2) + '%'
-          : 'N/A',
       },
       services: {
         transcription: this.transcriptionService?.getStatus() || null,
@@ -325,102 +256,30 @@ class TranscribeTranslatePipeline {
   }
 
   /**
-   * Format duration in ms to human readable
-   */
-  formatDuration(ms) {
-    const seconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-
-    if (hours > 0) {
-      return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${seconds % 60}s`;
-    } else {
-      return `${seconds}s`;
-    }
-  }
-
-  /**
-   * Print current pipeline statistics
-   */
-  printStats() {
-    const stats = this.getStats();
-    
-    console.log(`\n${'='.repeat(80)}`);
-    console.log(`📊 [PIPELINE STATISTICS] User: ${this.userId}`);
-    console.log(`${'='.repeat(80)}`);
-    console.log(`   Status: ${stats.isActive ? '🟢 ACTIVE' : '🔴 INACTIVE'}`);
-    console.log(`   Uptime: ${stats.stats.uptimeFormatted}`);
-    console.log(`   Transcriptions Received: ${stats.stats.transcriptionsReceived}`);
-    console.log(`   Translations Completed: ${stats.stats.translationsCompleted}`);
-    console.log(`   Analyses Completed: ${stats.stats.analysesCompleted}`);
-    console.log(`   Success Rate: ${stats.stats.successRate}`);
-    console.log(`   Errors: ${stats.stats.errors}`);
-    console.log(`   Last Activity: ${stats.stats.lastActivityTime || 'N/A'}`);
-    
-    if (stats.services.bedrock) {
-      console.log(`\n   🧠 [Bedrock Statistics]`);
-      console.log(`   Total Analyses: ${stats.services.bedrock.stats.totalAnalyses}`);
-      console.log(`   High Risk Detections: ${stats.services.bedrock.stats.highRiskDetections}`);
-      console.log(`   Medium Risk Detections: ${stats.services.bedrock.stats.mediumRiskDetections}`);
-      console.log(`   Low Risk Detections: ${stats.services.bedrock.stats.lowRiskDetections}`);
-      console.log(`   Average Risk Score: ${stats.services.bedrock.stats.averageRiskScore}%`);
-    }
-    
-    console.log(`${'='.repeat(80)}\n`);
-  }
-
-  /**
-   * Register a speaker with their role in the Bedrock service
-   * @param {string} socketId - Speaker's socket ID
-   * @param {string} role - "user" or "caller"
-   */
-  registerSpeaker(socketId, role) {
-    if (this.bedrockService) {
-      this.bedrockService.registerSpeaker(socketId, role);
-      console.log(`👤 [PIPELINE] Registered speaker ${socketId} as ${role.toUpperCase()}`);
-    }
-  }
-
-  /**
-   * Stop the pipeline and cleanup all services
+   * Stop the pipeline
    */
   async stop() {
     try {
       this.isActive = false;
 
-      console.log(`\n${'='.repeat(80)}`);
-      console.log(`⏹️  [PIPELINE] Stopping for user: ${this.userId}`);
-      console.log(`${'='.repeat(80)}`);
-
-      // Print final statistics
-      this.printStats();
-
-      console.log(`🔄 [PIPELINE] Cleaning up services...`);
-
       if (this.transcriptionService) {
         await this.transcriptionService.stop();
         this.transcriptionService = null;
-        console.log(`   ✅ Transcription Service stopped`);
       }
 
       if (this.translationService) {
         await this.translationService.stop();
         this.translationService = null;
-        console.log(`   ✅ Translation Service stopped`);
       }
 
       if (this.bedrockService) {
         await this.bedrockService.stop();
         this.bedrockService = null;
-        console.log(`   ✅ Bedrock Service stopped`);
       }
 
       this.pipelineCallback = null;
 
-      console.log(`\n✅ [PIPELINE] Successfully stopped`);
-      console.log(`${'='.repeat(80)}\n`);
+      console.log(`\n✅ [PIPELINE] Stopped\n`);
 
     } catch (error) {
       console.error(`\n❌ [PIPELINE] Error stopping:`, error.message);
