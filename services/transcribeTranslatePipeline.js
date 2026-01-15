@@ -1,6 +1,6 @@
 const { TranscriptionService } = require("./transcriptionService");
 const { TranslationService } = require("./translationService");
-const { BedrockScamDetectionService } = require("./bedrockScamDetectionService");
+const { BedrockScamDetectionService } = require("./bedrockscamdetectionservice");
 
 /**
  * Enhanced Pipeline: Transcription → Translation → Bedrock Scam Analysis
@@ -14,7 +14,7 @@ class TranscribeTranslatePipeline {
     this.transcriptionService = null;
     this.translationService = null;
     this.bedrockService = null;
-    this.isActive = false;
+    this.isActive = false; 
     this.pipelineCallback = null;
     this.detectedLanguage = null;
     
