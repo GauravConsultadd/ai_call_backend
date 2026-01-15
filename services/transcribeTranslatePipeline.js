@@ -95,7 +95,7 @@ class TranscribeTranslatePipeline {
       console.error(`\n❌ [PIPELINE] Failed to start:`, error.message);
       await this.stop();
       return false;
-    }
+    } 
   }
 
   /**
